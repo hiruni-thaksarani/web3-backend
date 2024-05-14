@@ -3,8 +3,8 @@ os: linux
 files:
   - source: /
     destination: /home/ec2-user/w3g-project/web3-backend
-    overwrite:true
-file_exists_behaviour:OVERWRITE
+    overwrite: true
+file_exists_behaviour: OVERWRITE
 hooks:
   #  ApplicationStop:
   #  DownloadBundle:

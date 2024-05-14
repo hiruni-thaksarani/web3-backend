@@ -6,9 +6,7 @@ name: Node.js CI
 on:
   push:
     branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
-
+  
 jobs:
   build:
 
@@ -26,8 +24,7 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-    - run: npm install
-    - run: npm run build 
+    - run: npm ci
     - run: |
         touch .env
         echo "${{ secrets.DB_CONNECTION_URL }}" > .env

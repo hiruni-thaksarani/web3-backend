@@ -85,6 +85,7 @@ export default class UserController {
       console.log(updatedUser);
       res.status(200).json(updatedUser);
     } catch (error) {
+      console.log(error);
       res.status(400).send({error});
     }
   }

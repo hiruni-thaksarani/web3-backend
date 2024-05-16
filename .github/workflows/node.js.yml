@@ -23,8 +23,8 @@ jobs:
       id: deploy
       run: |
         aws deploy create-deployment \
-        --application-name w3g-backend \
-        --deployment-group-name w3g-backend-deploy-group \
+        --application-name w3g-2-backend \
+        --deployment-group-name w3g-backend-2-deploy-group \
         --deployment-config-name CodeDeployDefault.OneAtATime \
         --github-location repository=${{ github.repository }},commitId=${{ github.sha }}
 

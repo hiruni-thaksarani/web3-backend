@@ -65,9 +65,6 @@ export type UserDocument = HydratedDocument<User>;
 
 @Schema({ timestamps: true })
 export class User {
-  static findOne(arg0: { email: string; }) {
-    throw new Error('Method not implemented.');
-  }
   @Prop({
     trim: true,
     enum: [userTypes.admin, userTypes.user],
@@ -80,6 +77,10 @@ export class User {
     default: statuses.onboard,
   })
   status: string;
+
+  @Prop({
+  })
+  fcmToken: string;
 
   @Prop({
     required: true,

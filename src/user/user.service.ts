@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Body, ConflictException, Injectable, NotFoundException, Req, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Document } from 'mongoose';
 import CreateUserDto from './dto/createUser.dto';
@@ -9,10 +9,14 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MailerService } from '@nestjs-modules/mailer';
+import { NotificationService } from 'src/notifications/notification.service';
+import userTypes from 'src/constants/user_types';
+import UpdateUserFcmDto from './dto/updateUserFcmDto';
 
 
 @Injectable()
 export default class UserService {
+  userService: any;
   updatedUser(invalidUserDto: { basic_info: { first_name: string; last_name: string; dob: Date; gender: string; }; type: string; status: string; contact_info: { mobile_numbers: string[]; email: string; }; auth_info: { password: string; }; }): any {
       throw new Error("Method not implemented.");
   }
@@ -22,6 +26,7 @@ export default class UserService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private readonly mailService: MailerService,
+    private notificationService:NotificationService,
     
   ) {}
 
@@ -37,6 +42,7 @@ export default class UserService {
   async createUser(createUserDto: CreateUserDto) {
     const {auth_info}=createUserDto;
     const{contact_info}=createUserDto;
+    const fcmToken = "";
     const hashedPassword = await bcrypt.hash(auth_info.password,10);
     const sEmail =contact_info.email.trim().toLowerCase();
     const sMobile = contact_info.mobile_numbers;
@@ -80,34 +86,110 @@ export default class UserService {
     if(createUserDto.contact_info.email.length>320){
       throw new ConflictException("Maximum length for email is 25.")
     }
+    // Send email to the newly created user
+    // await this.mailService.sendMail({
+    //   to: user.contact_info.email,
+    //   subject: 'Welcome to Our Application',
+    //   template: 'welcome', // Assuming you have a template named 'welcome'
+    //   context: {
+    //     firstname: user.basic_info.first_name,
+    //     password:user.auth_info.password,
+    //   }
+    // });
+
+    // return user;
+
+    
 
     createUserDto.auth_info.password=hashedPassword;
     const user = await this.userModel.create(createUserDto);
-    // console.log(user);
+
+    const mail = await this.mailService.sendMail({
+      to: user.contact_info.email,
+      subject: 'Test Mail',
+      template: 'add',
+      context: {
+          firstname: user.basic_info.first_name,
+          password :user.auth_info.password,
+      }
+  })
+
     return createUserDto;
+
   }
 
-  async login(userLoginDto: UserLoginDto): Promise<{ access_token: string }> {
+  // async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
+  //   try {
+  //     const updatedUser = await this.userModel.findByIdAndUpdate(
+  //       userId,
+  //       { fcmToken },
+  //       { new: true }
+  //     );
+
+  //     if (!updatedUser) {
+  //       throw new NotFoundException('User not found');
+  //     }
+
+  //     // Optionally, you can send a notification or perform other actions here
+  //     // await this.notificationService.sendNotification(userId, {
+  //     //   title: 'FCM Token Updated',
+  //     //   body: 'Your FCM token has been successfully updated.',
+  //     // });
+  //   } catch (error) {
+  //     console.error('Error updating FCM token:', error);
+  //   }
+  // }
+
+  async updateUserFCM(
+    userId: string,
+    updateUserDto: UpdateUserFcmDto,
+  ): Promise<{ message: string }> {
+    const updatedUser = await this.userModel.findByIdAndUpdate(
+      userId,
+      { fcmToken: updateUserDto.fcmToken },
+      { new: true },
+    );
+    if (!updatedUser) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+    return { message: 'User update successfully' };
+  }
+  
+  
+  async login(userLoginDto: UserLoginDto ,fcmToken1:string): Promise<{ access_token: string; user: any }> {
     const { email, password } = userLoginDto;
-    const user = await this.userModel.findOne({ "contact_info.email": email });
+    const user = await this.userModel.findOne({ 'contact_info.email': email });
 
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
     if (!user.auth_info.password) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid password');
     }
 
     const isPasswordMatched = bcrypt.compareSync(password, user.auth_info.password);
-    
+
     if (!isPasswordMatched) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const payload = { type: user.type, email: user.contact_info.email };
+    const updateUserFcmDto : UpdateUserFcmDto ={
+      fcmToken: fcmToken1
+    }
+    await this.updateUserFCM(user._id.toString(), updateUserFcmDto);
+     // Fetch the updated user from the database
+
+     // Fetch the updated user from the database
+    const updatedUser = await this.userModel.findById(user._id);
+
+    const payload = { email: user.contact_info.email, type: user.type };
     const access_token = this.jwtService.sign(payload);
-    return { access_token};
+   
+
+    return { access_token, user: updatedUser };
+
+
   }
 
   async deleteUserByEmail(email: string): Promise<void> {
@@ -121,8 +203,6 @@ export default class UserService {
 
     const userToUpdate = await this.userModel.findOne({ 'contact_info.email': email }).exec();
 
-    
-    console.log("My email"+email);
 
     const isUser = await this.userModel.findOne({'contact_info.email':updateUserDto.contact_info.email}).exec();
 
@@ -224,34 +304,7 @@ export default class UserService {
       throw new ConflictException('Invalid email format');
     }
 
-    
-
-    // if (updateUserDto.contact_info && updateUserDto.contact_info.mobile_numbers) {
-    //   const updatedMobileNumbers = updateUserDto.contact_info.mobile_numbers;
-    //   for (const updatedMobileNumber of updatedMobileNumbers) {
-    //     const existingUserWithMobileNumber = await this.userModel.findOne({ 'contact_info.mobile_numbers': updatedMobileNumber }).exec();
-    //     if (existingUserWithMobileNumber && existingUserWithMobileNumber.contact_info.email !== email) {
-    //       throw new ConflictException('Mobile number  already exists for another user');
-    //     }
-    //   }
-    // }
-
-    // if (updateUserDto.contact_info && updateUserDto.contact_info.mobile_numbers) {
-    //   if (updateUserDto.contact_info.mobile_numbers.length > 3) {
-    //     throw new ConflictException("Maximum 3 numbers can be entered.");
-    //   }
-
-    //   for (const mobileNumber of updateUserDto.contact_info.mobile_numbers) {
-    //     const isExistMobile = await this.userModel.findOne({'contact_info.mobile_numbers': mobileNumber, _id: {$ne: isUser._id}}).exec();
-    //     if (isExistMobile) {
-    //       throw new ConflictException(`Mobile number ${mobileNumber} already exists`);
-    //     }
-    //   }
-    // }
-
-
     const user = await this.userModel.findOneAndUpdate({ 'contact_info.email': email }, updateUserDto,{new :true}).exec();
-    console.log(user);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -271,7 +324,7 @@ export default class UserService {
 
   async deactivateUser(email: string): Promise<User> {
     const user = await this.userModel.findOne({ 'contact_info.email': email }).exec();
-    console.log(user);
+    const userId=user._id.toString();
     
     if (!user) {
       throw new NotFoundException('User not found');
@@ -281,6 +334,16 @@ export default class UserService {
     if (user.status === 'INACTIVE') {
       throw new ConflictException('User is already inactive');
     }
+
+    try { 
+      // Send notification to the deactivated user
+      await this.notificationService.sendNotification(userId, {
+        title: 'Account Deactivated',
+        body: 'Your account has been deactivated.',
+      });
+    } catch (error) {
+      console.error(`Failed to send notification for user ID ${userId}: ${error}`);
+    }
   
     // Update user status to 'INACTIVE'
     const updatedUser = await this.userModel.findOneAndUpdate(
@@ -288,6 +351,8 @@ export default class UserService {
       { status: 'INACTIVE' },
       { new: true }
     ).exec();
+
+
 
     const mail = await this.mailService.sendMail({
       to: updatedUser.contact_info.email,
@@ -314,10 +379,10 @@ export default class UserService {
       const user = await this.userModel.findOne({ "contact_info.email": email }).exec();
       return user;
     } catch (error) {
-      console.error('Error finding user by email:', error);
       throw error;
     }
   }
+ 
 
   
   // async sendDeactivationEmail(user: User): Promise<void> {

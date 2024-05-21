@@ -63,6 +63,9 @@ export default class CreateUserDto {
     type: string;
 
     @Transform(({ value }) => value.trim())
+    fcmToken: string ;
+
+    @Transform(({ value }) => value.trim())
     @IsString()
     @IsNotEmpty()
     status: string;

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ExecutionContext, Get, Injectable, Param, Patch, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ExecutionContext, Get, Injectable, NotFoundException, Param, Patch, Post, Req, Request, Res, UseGuards } from '@nestjs/common';
 import { Response, response } from 'express';
 import UserService from './user.service';
 import UserLoginDto from './dto/login.dto';
@@ -19,6 +19,7 @@ export default class UserController {
   [x: string]: any;
   constructor(private readonly service: UserService) {}
 
+  
   @Post("sign-up")
   async createUser(@Body() createUserDto: CreateUserDto, @Res() res: Response) {
     try {
@@ -30,7 +31,7 @@ export default class UserController {
     }
   }
 
-  
+  @UseGuards(AdminGuard)
   @Get("getUsers")
   async getAllUsers(): Promise<User[]> {
     try {
@@ -41,13 +42,13 @@ export default class UserController {
       throw error;
     }
   }
-  
+
   @Post("login")
-  async login(@Body() userLoginDto: UserLoginDto, @Res() res: Response): Promise<void> {
+  async login(@Body() userLoginDto: UserLoginDto, @Body('fcmToken') fcmToken: string, @Res() res: Response): Promise<Response<{ access_token: string; user: any }, Record<string, any>>> {
     try {
-      const { access_token } = await this.service.login(userLoginDto);
-      console.log("Access token",access_token)
-      res.set({authorization:access_token}).json(); 
+      const { access_token ,user} = await this.service.login(userLoginDto,fcmToken);
+      return  res.set({ authorization: access_token }).json({access_token,user}); 
+
     } catch (error) {
       console.error('Error occurred during login:', error);
       res.status(401).send('Invalid email or password');
@@ -61,9 +62,10 @@ export default class UserController {
     res.status(200).send('User deleted successfully');
   } catch (error) {
     console.error('Error deleting user:', error);
-    res.status(500).send('Internal server error');
+    console.log(error);
   }
   }
+
 
   @Patch(':email')
   async updateUser(@Param('email') email: string, @Body() updateUserDto: Partial<CreateUserDto>, @Res() res: Response): Promise<void> {
@@ -85,10 +87,16 @@ export default class UserController {
       console.log(updatedUser);
       res.status(200).json(updatedUser);
     } catch (error) {
-      console.log(error);
       res.status(400).send({error});
     }
   }
+
+  // @Post('update-fcm-token')
+  // async updateFcmToken(@Body('fcmToken') fcmToken: string, @Req() req) {
+  //   const userId = req.user._id.toString(); 
+  //   await this.userService.updateFcmToken(userId, fcmToken);
+  //   return { message: 'FCM token updated successfully' };
+  // }
 
   // @Get(":email")
   // async getUserByEmail(@Param('email') email: string, @Res() res: Response): Promise<void> {
